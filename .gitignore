@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.env
+wandb/
+data/raw/
+outputs/checkpoints/
+*.pt
+*.pth
+*.ckpt
+完成作業指南報告.md
+check_environment.py
