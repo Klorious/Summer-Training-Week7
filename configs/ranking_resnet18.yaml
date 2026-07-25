@@ -11,3 +11,11 @@ weight_decay: 0.0001
 random_seed: 20260725
 num_workers: 4
 checkpoint_metric: "val_spearman"
+output_format: "continuous_regression_scalar"
+quality_target_scale: "1-10 human quality score"
+observed_training_range: "4-9"
+prediction_output_range: "unbounded real-valued regression output"
+target_source: "Manual 1-10 quality scores from data/annotations/binary_all_scores.csv; locked human Top-100 excluded"
+higher_is_better: true
+human_reference_used_for_training: false
+human_reference_usage: "final comparison only"
