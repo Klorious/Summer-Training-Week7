@@ -15,26 +15,27 @@ REFERENCE_CSV = "data/annotations/binary_reference_100.csv"
 IMG_DIR = "data/raw"
 OUTPUT_CSV = "outputs/predictions/reference_results.csv"
 
-# The ResNet18 checkpoint is intentionally learning-rate-specific because
-# validation F1 selected LR=0.0001 over LR=0.001.
+# These checkpoints were selected only by validation F1 from the reproducible
+# PyTorch 2.6 reruns. The locked 100-image reference set was not used to choose
+# the architecture, learning rate, epoch, or checkpoint.
 MODEL_SPECS = {
     "VGG16": {
         "model_name": "vgg16",
-        "checkpoint": "outputs/checkpoints/best_vgg16.pth",
+        "checkpoint": "outputs/checkpoints/best_vgg16_lr0.0001.pth",
         "learning_rate": 0.0001,
-        "source_wandb_run_id": "czw8hak1",
+        "source_wandb_run_id": "sgxudag7",
     },
     "ResNet18": {
         "model_name": "resnet18",
-        "checkpoint": "outputs/checkpoints/best_resnet18_lr0.0001.pth",
-        "learning_rate": 0.0001,
-        "source_wandb_run_id": None,
+        "checkpoint": "outputs/checkpoints/best_resnet18_lr0.001.pth",
+        "learning_rate": 0.001,
+        "source_wandb_run_id": "6d6u2kul",
     },
     "ResNet50": {
         "model_name": "resnet50",
-        "checkpoint": "outputs/checkpoints/best_resnet50.pth",
+        "checkpoint": "outputs/checkpoints/best_resnet50_lr0.0001.pth",
         "learning_rate": 0.0001,
-        "source_wandb_run_id": "0zwvcvtq",
+        "source_wandb_run_id": "af8dkst0",
     },
 }
 
