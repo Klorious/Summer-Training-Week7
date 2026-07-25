@@ -8,7 +8,7 @@ from PIL import Image
 from tqdm import tqdm
 from torchvision import transforms
 
-from src.models import get_quality_model
+from models import get_quality_model
 
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
