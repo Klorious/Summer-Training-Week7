@@ -1,184 +1,327 @@
-import os
-import yaml
+import argparse
+import random
+from pathlib import Path
+
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import wandb
+import yaml
+from sklearn.metrics import f1_score, precision_score, recall_score
 from torch.utils.data import DataLoader, Subset
 from torchvision import transforms
-from sklearn.metrics import precision_score, recall_score, f1_score
-import wandb
 
 from dataset import RoadImageDataset
 from models import get_binary_model
 
-# ==========================================
-# 0. 測試開關與路徑設定
-# ==========================================
-SMOKE_TEST = False  # 正式訓練時請改為 False
-CONFIG_PATH = "configs/resnet18.yaml"
+
 TRAIN_CSV = "data/splits/train.csv"
 VAL_CSV = "data/splits/val.csv"
 IMG_DIR = "data/raw"
+CHECKPOINT_DIR = Path("outputs/checkpoints")
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Train a Unit 7 binary Good/Bad image classifier."
+    )
+    parser.add_argument(
+        "--config",
+        default="configs/resnet18.yaml",
+        help="Path to the YAML experiment configuration.",
+    )
+    parser.add_argument(
+        "--smoke-test",
+        action="store_true",
+        help="Use 16 train/validation images and run only two epochs.",
+    )
+    parser.add_argument(
+        "--run-name-suffix",
+        default="",
+        help="Optional suffix appended to the W&B run name.",
+    )
+    parser.add_argument(
+        "--wandb-mode",
+        choices=("online", "offline", "disabled"),
+        default="online",
+        help="W&B logging mode.",
+    )
+    return parser.parse_args()
+
+
+def set_random_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+    # Make the selected run reproducible on the same software/hardware stack.
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
+def learning_rate_text(value):
+    """Return a stable, human-readable learning-rate string for filenames."""
+    return format(float(value), ".10g")
+
+
+def build_checkpoint_path(config, smoke_test=False):
+    lr_text = learning_rate_text(config["learning_rate"])
+    prefix = "smoke_" if smoke_test else ""
+    filename = f"{prefix}best_{config['model_name']}_lr{lr_text}.pth"
+    return CHECKPOINT_DIR / filename
+
 
 def main():
-    # ==========================================
-    # 1. 讀取設定檔與 W&B 初始化
-    # ==========================================
-    with open(CONFIG_PATH, "r") as f:
-        config = yaml.safe_load(f)
-        
-    # 動態產生符合規定的 run 名稱 (例: vgg16_pretrained_lr0.0001_bs32)
-    run_name = f"{config['model_name']}_pretrained_lr{config['learning_rate']}_bs{config['batch_size']}"
-    if SMOKE_TEST:
-        run_name = "SMOKE_TEST_" + run_name
+    args = parse_args()
 
-    wandb.init(
+    with open(args.config, "r", encoding="utf-8") as file:
+        config = yaml.safe_load(file)
+
+    required = {
+        "model_name",
+        "pretrained",
+        "learning_rate",
+        "batch_size",
+        "epochs",
+        "optimizer",
+        "input_size",
+        "weight_decay",
+        "random_seed",
+    }
+    missing = required.difference(config)
+    if missing:
+        raise ValueError(
+            f"{args.config} is missing required fields: {', '.join(sorted(missing))}"
+        )
+    if str(config["optimizer"]).lower() != "adamw":
+        raise ValueError("This training script currently supports optimizer: AdamW")
+
+    config = dict(config)
+    config["config_path"] = args.config
+    config["task"] = "binary_classification"
+    config["label_encoding"] = "Bad=0, Good=1"
+    config["checkpoint_selection_metric"] = "validation F1"
+    config["smoke_test"] = bool(args.smoke_test)
+    if args.smoke_test:
+        config["epochs"] = 2
+
+    checkpoint_path = build_checkpoint_path(config, smoke_test=args.smoke_test)
+    config["checkpoint_path"] = checkpoint_path.as_posix()
+
+    lr_text = learning_rate_text(config["learning_rate"])
+    run_name = (
+        f"{config['model_name']}_pretrained_lr{lr_text}_bs{config['batch_size']}"
+    )
+    if args.run_name_suffix:
+        run_name = f"{run_name}_{args.run_name_suffix.strip()}"
+    if args.smoke_test:
+        run_name = f"SMOKE_TEST_{run_name}"
+
+    run = wandb.init(
         project="training-Unit7-Binary",
         name=run_name,
-        config=config
+        config=config,
+        mode=args.wandb_mode,
+        job_type="training",
+        tags=["basic", "binary", config["model_name"]],
     )
-    
-    # 設置裝置與 Random Seed
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    torch.manual_seed(config['random_seed'])
-    
-    # ==========================================
-    # 2. 資料前處理與 DataLoader
-    # ==========================================
-    # 訓練集可使用隨機增強，驗證集必須固定
-    train_transform = transforms.Compose([
-        transforms.Resize((256, 256)),
-        transforms.RandomResizedCrop(config['input_size']),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
-    
-    val_transform = transforms.Compose([
-        transforms.Resize((256, 256)),
-        transforms.CenterCrop(config['input_size']),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
-    
+    set_random_seed(int(config["random_seed"]))
+    print(f"Device: {device}")
+    print(f"Config: {args.config}")
+    print(f"Checkpoint: {checkpoint_path}")
+
+    train_transform = transforms.Compose(
+        [
+            transforms.Resize((256, 256)),
+            transforms.RandomResizedCrop(config["input_size"]),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225],
+            ),
+        ]
+    )
+    val_transform = transforms.Compose(
+        [
+            transforms.Resize((256, 256)),
+            transforms.CenterCrop(config["input_size"]),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225],
+            ),
+        ]
+    )
+
     train_dataset = RoadImageDataset(TRAIN_CSV, IMG_DIR, transform=train_transform)
     val_dataset = RoadImageDataset(VAL_CSV, IMG_DIR, transform=val_transform)
-    
-    if SMOKE_TEST:
-        # Smoke Test: 只取前 16 張圖測試管線
-        train_dataset = Subset(train_dataset, range(16))
-        val_dataset = Subset(val_dataset, range(16))
-        config['epochs'] = 2
-        print("⚠️ 進入 Smoke Test 模式：僅使用 16 張圖片進行 2 個 Epoch 測試。")
-        
-    train_loader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=config['batch_size'], shuffle=False)
+    if args.smoke_test:
+        train_dataset = Subset(train_dataset, range(min(16, len(train_dataset))))
+        val_dataset = Subset(val_dataset, range(min(16, len(val_dataset))))
+        print("Smoke test enabled: at most 16 train/validation images, two epochs")
 
-    # ==========================================
-    # 3. 載入模型、Loss 與 Optimizer
-    # ==========================================
-    model = get_binary_model(model_name=config['model_name'], pretrained=config['pretrained'])
-    model = model.to(device)
-    
+    loader_generator = torch.Generator()
+    loader_generator.manual_seed(int(config["random_seed"]))
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=config["batch_size"],
+        shuffle=True,
+        generator=loader_generator,
+    )
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=config["batch_size"],
+        shuffle=False,
+    )
+
+    model = get_binary_model(
+        model_name=config["model_name"],
+        pretrained=config["pretrained"],
+    ).to(device)
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.AdamW(model.parameters(), lr=config['learning_rate'], weight_decay=config['weight_decay'])
-    
-    # ==========================================
-    # 4. 訓練迴圈
-    # ==========================================
-    best_val_f1 = 0.0
+    optimizer = optim.AdamW(
+        model.parameters(),
+        lr=config["learning_rate"],
+        weight_decay=config["weight_decay"],
+    )
+
+    CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
+    best_val_f1 = -1.0
     best_epoch = 0
-    
-    for epoch in range(1, config['epochs'] + 1):
+    best_labels = None
+    best_predictions = None
+
+    for epoch in range(1, config["epochs"] + 1):
         model.train()
-        train_loss, train_correct, train_total = 0.0, 0, 0
-        
+        train_loss = 0.0
+        train_correct = 0
+        train_total = 0
+
         for images, labels in train_loader:
-            images, labels = images.to(device), labels.to(device)
-            
+            images = images.to(device)
+            labels = labels.to(device)
+
             optimizer.zero_grad()
             outputs = model(images)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
-            
+
             train_loss += loss.item() * images.size(0)
-            _, predicted = torch.max(outputs, 1)
-            train_correct += (predicted == labels).sum().item()
+            predictions = outputs.argmax(dim=1)
+            train_correct += (predictions == labels).sum().item()
             train_total += labels.size(0)
-            
+
         epoch_train_loss = train_loss / train_total
         epoch_train_acc = train_correct / train_total
 
-        # ==========================================
-        # 5. 驗證階段與指標計算
-        # ==========================================
         model.eval()
-        val_loss, val_correct, val_total = 0.0, 0, 0
-        all_preds, all_labels = [], []
-        
+        val_loss = 0.0
+        val_correct = 0
+        val_total = 0
+        all_predictions = []
+        all_labels = []
+
         with torch.no_grad():
             for images, labels in val_loader:
-                images, labels = images.to(device), labels.to(device)
+                images = images.to(device)
+                labels = labels.to(device)
                 outputs = model(images)
                 loss = criterion(outputs, labels)
-                
+
                 val_loss += loss.item() * images.size(0)
-                _, predicted = torch.max(outputs, 1)
-                val_correct += (predicted == labels).sum().item()
+                predictions = outputs.argmax(dim=1)
+                val_correct += (predictions == labels).sum().item()
                 val_total += labels.size(0)
-                
-                all_preds.extend(predicted.cpu().numpy())
-                all_labels.extend(labels.cpu().numpy())
-                
+                all_predictions.extend(predictions.cpu().tolist())
+                all_labels.extend(labels.cpu().tolist())
+
         epoch_val_loss = val_loss / val_total
         epoch_val_acc = val_correct / val_total
-        
-        # 計算基本任務要求的指標 (以 Good=1 為正類)
-        val_precision = precision_score(all_labels, all_preds, zero_division=0)
-        val_recall = recall_score(all_labels, all_preds, zero_division=0)
-        val_f1 = f1_score(all_labels, all_preds, zero_division=0)
-        
-        print(f"Epoch [{epoch}/{config['epochs']}] "
-              f"Train Loss: {epoch_train_loss:.4f}, Acc: {epoch_train_acc:.4f} | "
-              f"Val Loss: {epoch_val_loss:.4f}, Acc: {epoch_val_acc:.4f}, F1: {val_f1:.4f}")
-        
-        # W&B 動態紀錄
-        wandb.log({
-            "train/loss": epoch_train_loss,
-            "train/accuracy": epoch_train_acc,
-            "val/loss": epoch_val_loss,
-            "val/accuracy": epoch_val_acc,
-            "val/precision": val_precision,
-            "val/recall": val_recall,
-            "val/f1": val_f1,
-            "learning_rate": optimizer.param_groups[0]['lr'],
-            "epoch": epoch
-        })
-        
-        # 儲存最佳模型
-        if val_f1 > best_val_f1:
-            best_val_f1 = val_f1
-            best_epoch = epoch
-            torch.save(model.state_dict(), f"outputs/checkpoints/best_{config['model_name']}.pth")
-            
-    # ==========================================
-    # 6. 結束與最佳結果紀錄
-    # ==========================================
-    # 紀錄 Confusion Matrix
-    wandb.log({
-        "best_epoch": best_epoch,
-        "best_val_f1": best_val_f1,
-        "confusion_matrix": wandb.plot.confusion_matrix(
-            probs=None,
-            y_true=all_labels,
-            preds=all_preds,
-            class_names=["Bad", "Good"]
+        val_precision = precision_score(
+            all_labels, all_predictions, zero_division=0
         )
-    })
-    
+        val_recall = recall_score(all_labels, all_predictions, zero_division=0)
+        val_f1 = f1_score(all_labels, all_predictions, zero_division=0)
+
+        print(
+            f"Epoch [{epoch}/{config['epochs']}] "
+            f"Train Loss: {epoch_train_loss:.4f}, Acc: {epoch_train_acc:.4f} | "
+            f"Val Loss: {epoch_val_loss:.4f}, Acc: {epoch_val_acc:.4f}, "
+            f"Precision: {val_precision:.4f}, Recall: {val_recall:.4f}, "
+            f"F1: {val_f1:.4f}"
+        )
+
+        wandb.log(
+            {
+                "train/loss": epoch_train_loss,
+                "train/accuracy": epoch_train_acc,
+                "val/loss": epoch_val_loss,
+                "val/accuracy": epoch_val_acc,
+                "val/precision": val_precision,
+                "val/recall": val_recall,
+                "val/f1": val_f1,
+                "learning_rate": optimizer.param_groups[0]["lr"],
+                "epoch": epoch,
+            }
+        )
+
+        if val_f1 > best_val_f1:
+            best_val_f1 = float(val_f1)
+            best_epoch = int(epoch)
+            best_labels = list(all_labels)
+            best_predictions = list(all_predictions)
+            torch.save(
+                {
+                    "model_state_dict": model.state_dict(),
+                    "model_name": config["model_name"],
+                    "learning_rate": float(config["learning_rate"]),
+                    "best_epoch": best_epoch,
+                    "best_val_f1": best_val_f1,
+                    "config": config,
+                    "wandb_run_id": run.id if run is not None else None,
+                    "wandb_run_url": run.url if run is not None else None,
+                },
+                checkpoint_path,
+            )
+            print(
+                f"Saved best checkpoint at epoch {best_epoch}: "
+                f"val F1={best_val_f1:.4f}"
+            )
+
+    if best_labels is None or best_predictions is None:
+        raise RuntimeError("Training completed without a valid checkpoint")
+
+    wandb.log(
+        {
+            "best_epoch": best_epoch,
+            "best_val_f1": best_val_f1,
+            "best/confusion_matrix": wandb.plot.confusion_matrix(
+                probs=None,
+                y_true=best_labels,
+                preds=best_predictions,
+                class_names=["Bad", "Good"],
+            ),
+        }
+    )
+    if run is not None:
+        run.summary["best_epoch"] = best_epoch
+        run.summary["best_val_f1"] = best_val_f1
+        run.summary["selected_checkpoint"] = checkpoint_path.as_posix()
+
     wandb.finish()
-    print("🎉 訓練結束！最佳模型已儲存。")
+    print(
+        f"Training complete. Best epoch={best_epoch}, "
+        f"best validation F1={best_val_f1:.4f}"
+    )
+    print(f"Selected checkpoint: {checkpoint_path}")
+
 
 if __name__ == "__main__":
     main()
