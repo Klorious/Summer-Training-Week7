@@ -1,0 +1,654 @@
+% !TeX program = xelatex
+% !TeX encoding = UTF-8
+\documentclass[12pt,a4paper,fontset=none]{ctexart}
+
+\usepackage{fontspec}
+\usepackage{xeCJK}
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{subcaption}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{siunitx}
+\usepackage{fancyhdr}
+
+\setmainfont{TeX Gyre Termes}
+\setsansfont{TeX Gyre Heros}
+\setmonofont{Latin Modern Mono}
+\setCJKmainfont[
+  BoldFont=FandolSong-Bold
+]{FandolSong-Regular}
+\setCJKsansfont[
+  BoldFont=FandolHei-Bold
+]{FandolHei-Regular}
+\setCJKmonofont{FandolFang-Regular}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!55!black,
+  urlcolor=blue!65!black,
+  citecolor=blue!55!black,
+  pdftitle={Training Unit 7：影像品質二分類與 Top-100 排名分析}
+}
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{Training Unit 7}
+\rhead{影像品質分類與排名}
+\cfoot{\thepage}
+\setlength{\headheight}{15pt}
+\setlength{\parindent}{2em}
+\setlength{\parskip}{0.35em}
+\renewcommand{\arraystretch}{1.18}
+
+\newcommand{\todo}[1]{\textcolor{red!75!black}{\textbf{[待補：#1]}}}
+
+\newcommand{\reportfigure}[3]{%
+  \begin{figure}[H]
+    \centering
+    \IfFileExists{#1}
+      {\includegraphics[width=0.94\linewidth]{#1}}
+      {\fbox{\parbox[c][5cm][c]{0.90\linewidth}{\centering
+        尚未放入圖檔\\[0.5em]\texttt{\detokenize{#1}}}}}
+    \caption{#2}
+    \label{#3}
+  \end{figure}
+}
+
+\newcommand{\casecard}[3]{%
+  \begin{minipage}[t]{0.31\linewidth}
+    \centering
+    \IfFileExists{#1}
+      {\includegraphics[width=\linewidth,height=4.1cm,keepaspectratio]{#1}}
+      {\fbox{\parbox[c][4.1cm][c]{0.90\linewidth}{\centering
+        \texttt{\detokenize{#1}}}}}
+    \par\smallskip
+    \textbf{\texttt{#2}}\par
+    \small #3
+  \end{minipage}
+}
+
+\title{\textbf{Training Unit 7}\\影像品質二分類與 Top-100 排名分析}
+\author{姓名：\underline{\hspace{4cm}}\qquad 學號：\underline{\hspace{4cm}}}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+\begin{abstract}
+本作業以 500 張山區道路與落石情境影像為資料集，先完成
+Good/Bad 二元分類，再進一步以連續品質分數建立影像品質排名。
+基礎任務比較 VGG16、ResNet18 與 ResNet50，並以驗證集 F1-score
+選擇 checkpoint；進階任務則在人工 Top-100 嚴格隔離的條件下，
+以 SmoothL1Loss 訓練三個品質迴歸模型，建立原始分數、信心修正
+分數及三模型集成分數。最後使用 Intersection、Overlap、Jaccard
+與 AP 比較模型 Top-100 和人工 Top-100，並分析人機一致與差異案例。
+\end{abstract}
+
+\tableofcontents
+\clearpage
+
+\section{方法與模型架構}
+\label{sec:methodology}
+
+\subsection{資料集與實驗流程}
+\label{subsec:dataset-protocol}
+
+資料集共有 500 張影像，影像路徑固定於
+\texttt{data/raw/}。基礎任務與進階任務採用不同的資料協定，
+避免把最終人工參考集合用於模型選擇。
+
+\begin{table}[H]
+  \centering
+  \caption{基礎與進階任務資料切分}
+  \label{tab:data-splits}
+  \begin{tabular}{lrrrr}
+    \toprule
+    任務 & 候選池 & 訓練集 & 驗證集 & 最終人工參考集 \\
+    \midrule
+    基礎二分類 & 500 & 300 & 100 & 100（Good 50／Bad 50）\\
+    進階品質排名 & 500 & 300 & 100 & 人工最佳 Top-100 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+兩套資料切分皆無 train、validation 與 reference 交集。
+基礎參考集僅用於最終二分類比較；進階人工 Top-100 僅用於
+模型與排名公式全部固定後的最終比較。
+
+\subsection{模型架構}
+\label{subsec:model-architectures}
+
+本實驗使用 ImageNet 預訓練的 VGG16、ResNet18 與 ResNet50。
+基礎任務將最後分類層改為兩個輸出節點，分別代表 Bad 與 Good；
+進階任務則將最後一層改為單一、不設上下界的連續迴歸輸出。
+
+\begin{table}[H]
+  \centering
+  \caption{模型輸出形式}
+  \label{tab:model-output}
+  \begin{tabularx}{\linewidth}{lXX}
+    \toprule
+    任務 & 輸出層 & 訓練目標與損失函數 \\
+    \midrule
+    基礎二分類 &
+    2 維 logits（Bad／Good） &
+    Good/Bad 標籤，Cross-Entropy Loss \\
+    進階品質排名 &
+    1 維無界連續分數 &
+    人工 1--10 品質分數，SmoothL1Loss \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{超參數與重現性設定}
+\label{subsec:hyperparameters}
+
+\begin{table}[H]
+  \centering
+  \caption{正式基礎二分類實驗設定}
+  \label{tab:binary-configs}
+  \begin{tabular}{lrrrrll}
+    \toprule
+    模型 & Learning rate & Batch & Epochs & Input & Optimizer & Pretrained \\
+    \midrule
+    VGG16 & 0.0001 & 32 & 30 & 224 & AdamW & Yes \\
+    ResNet18 & 0.0001 & 32 & 30 & 224 & AdamW & Yes \\
+    ResNet18 & 0.001 & 32 & 30 & 224 & AdamW & Yes \\
+    ResNet50 & 0.0001 & 32 & 30 & 224 & AdamW & Yes \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[H]
+  \centering
+  \caption{正式進階品質迴歸實驗設定}
+  \label{tab:ranking-configs}
+  \begin{tabular}{lrrrrlll}
+    \toprule
+    模型 & LR & Batch & Epochs & Input & Optimizer & Loss & Pretrained \\
+    \midrule
+    VGG16 & 0.0001 & 32 & 30 & 224 & AdamW & SmoothL1 & Yes \\
+    ResNet18 & 0.0001 & 32 & 30 & 224 & AdamW & SmoothL1 & Yes \\
+    ResNet50 & 0.0001 & 32 & 30 & 224 & AdamW & SmoothL1 & Yes \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+所有正式重跑均使用 random seed 20260725，並固定 Python、
+NumPy、PyTorch 與 DataLoader generator 的隨機狀態；
+cuDNN 設為 deterministic。最終重跑環境為 Python 3.12.3、
+PyTorch 2.6，GPU 為 NVIDIA Tesla V100-SXM2-32GB。
+
+\section{任務定義與人工標註準則}
+\label{sec:annotation}
+
+\subsection{Good/Bad 二元標籤}
+\label{subsec:binary-labels}
+
+每張影像先由人工給予 1--10 分品質分數，並使用下列固定門檻
+產生二元標籤：
+\[
+  y =
+  \begin{cases}
+    0\;(\text{Bad}), & 1 \leq s \leq 7,\\
+    1\;(\text{Good}), & 8 \leq s \leq 10.
+  \end{cases}
+\]
+
+人工評分考量道路可見程度、障礙物可辨識程度、影像清晰度、
+遮擋程度與場景真實性。基礎參考集包含 50 張 Good 與 50 張
+Bad，並涵蓋容易判斷及邊界案例。
+
+\subsection{進階人工 Top-100 規則}
+\label{subsec:human-top100}
+
+在查看任何進階模型分數、Top-100、Overlap、Jaccard 或 AP 前，
+先固定完整 500 張候選池，並依下列規則選出人工最佳 100 張：
+
+\begin{enumerate}[label=\arabic*.]
+  \item 道路範圍與關鍵道路資訊清楚。
+  \item 障礙物輪廓、位置與道路關係可可靠判讀。
+  \item 無明顯失焦、嚴重模糊或壓縮失真。
+  \item 重要道路與障礙物區域沒有嚴重遮擋。
+  \item 光影、幾何與物件關係自然，符合真實山區道路情境。
+\end{enumerate}
+
+人工集合採「優先選 10 分，再由 9 分補足」的方式建立，
+最後包含 52 張 10 分影像與 48 張 9 分影像。選擇時盡量依系列
+實際影像數量分散；若某系列 9／10 分不足，名額由其他高分系列
+補足。人工 Top-100 的成員及排名在查看模型結果前鎖定，
+後續未因模型結果而更換。
+
+\subsection{品質訓練目標}
+\label{subsec:quality-targets}
+
+進階模型只使用人工 Top-100 以外的 400 張影像。品質目標為原始
+人工 1--10 分；由於高分影像已進入人工 Top-100，實際進階訓練
+目標範圍為 4--9。模型輸出為無界實數，且分數越高代表模型判定
+品質越好。400 張影像再依品質分數分層切成 300 張訓練與
+100 張驗證。
+
+\section{基礎任務結果與分析}
+\label{sec:binary-results}
+
+\subsection{訓練曲線與超參數比較}
+\label{subsec:binary-training}
+
+\reportfigure{figures/wandb/binary_loss_curves.png}
+  {基礎任務三模型的 training/validation loss 曲線}
+  {fig:binary-loss}
+
+\reportfigure{figures/wandb/binary_accuracy_curves.png}
+  {基礎任務三模型的 training/validation accuracy 曲線}
+  {fig:binary-accuracy}
+
+\reportfigure{figures/wandb/binary_resnet18_lr_comparison.png}
+  {ResNet18 兩組 learning rate 的 validation F1 比較}
+  {fig:binary-lr}
+
+\begin{table}[H]
+  \centering
+  \caption{正式基礎實驗的最佳 validation F1}
+  \label{tab:binary-validation}
+  \begin{tabular}{llrrl}
+    \toprule
+    模型 & Learning rate & Best epoch & Best validation F1 & W\&B run ID \\
+    \midrule
+    ResNet18 & 0.0001 & 2 & 0.7869 & \texttt{z9fy0ef9} \\
+    ResNet18 & 0.001 & 17 & 0.8112 & \texttt{6d6u2kul} \\
+    VGG16 & 0.0001 & 4 & 0.8308 & \texttt{sgxudag7} \\
+    ResNet50 & 0.0001 & 5 & \textbf{0.8652} & \texttt{af8dkst0} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\reportfigure{figures/wandb/binary_runs_table.png}
+  {基礎任務正式 W\&B runs 的設定與結果總表}
+  {fig:binary-runs-table}
+
+ResNet18 的 learning rate 由 0.0001 提高至 0.001 後，最佳
+validation F1 由 0.7869 提升至 0.8112，因此後續參考集推論採用
+LR=0.001 的 checkpoint。三種架構中，ResNet50 的最佳 validation
+F1 最高。所有選擇皆只依 validation 結果完成，沒有使用最終參考集。
+
+\subsection{最終人工參考集結果}
+\label{subsec:binary-reference}
+
+\begin{table}[H]
+  \centering
+  \caption{三模型在 100 張人工參考集上的二分類結果}
+  \label{tab:binary-reference}
+  \begin{tabular}{lrrrrrrrrr}
+    \toprule
+    模型 & Acc. & Prec. & Recall & F1 & TN & FP & FN & TP \\
+    \midrule
+    VGG16 & \textbf{0.77} & \textbf{0.6849} & 1.00 & \textbf{0.8130}
+          & 27 & 23 & 0 & 50 \\
+    ResNet18 & 0.56 & 0.5333 & 0.96 & 0.6857
+          & 8 & 42 & 2 & 48 \\
+    ResNet50 & 0.64 & 0.5814 & 1.00 & 0.7353
+          & 14 & 36 & 0 & 50 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\reportfigure{figures/wandb/binary_confusion_matrices.png}
+  {三模型在人工參考集上的混淆矩陣}
+  {fig:binary-confusion}
+
+雖然 ResNet50 在 validation F1 最佳，但 VGG16 在嚴格隔離的人工
+參考集上取得最高 F1（0.8130）。這個差異可能反映資料量有限、
+validation 與 reference 的場景分布差異，以及模型對 Good 類別的
+偏好。三模型皆出現較多 false positive，尤其 ResNet18 將 42 張
+人工 Bad 判為 Good，顯示模型容易把清晰度或高對比誤認為整體品質。
+
+\subsection{正確與錯誤預測案例}
+\label{subsec:binary-cases}
+
+\begin{figure}[H]
+  \centering
+  \casecard{figures/cases/p1_seed12.jpg}{p1\_seed12}
+    {人工 Bad、VGG16 判為 Bad；道路資訊不足，模型正確辨識為低品質。}
+  \hfill
+  \casecard{figures/cases/p6_img19.png}{p6\_img19}
+    {人工 Bad、VGG16 判為 Bad；畫面以落石近景為主，缺少完整道路脈絡。}
+  \hfill
+  \casecard{figures/cases/p0_img21.png}{p0\_img21}
+    {人工 Good、VGG16 判為 Good；道路、落石與濕滑狀態皆清楚可辨。}
+
+  \medskip
+  \casecard{figures/cases/p2_img19.png}{p2\_img19}
+    {人工 Good、VGG16 判為 Good；雖為雨天，障礙物和道路關係仍清楚。}
+  \hfill
+  \casecard{figures/cases/p2_seed0.jpg}{p2\_seed0}
+    {人工 Good、VGG16 判為 Good；曝光自然、道路輪廓完整且清晰。}
+  \caption{VGG16 正確預測案例}
+  \label{fig:binary-correct-cases}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \casecard{figures/cases/p7_img12.png}{p7\_img12}
+    {人工 Bad、模型判 Good；模型可能偏重道路可見與畫面清晰，低估障礙物影響。}
+  \hfill
+  \casecard{figures/cases/p3_img12.png}{p3\_img12}
+    {人工 Bad、模型判 Good；岩壁與落石清楚，但缺少完整道路任務資訊。}
+  \hfill
+  \casecard{figures/cases/p9_img5.png}{p9\_img5}
+    {人工 Bad、模型判 Good；模型可能受到暖色光線與高局部對比影響。}
+
+  \medskip
+  \casecard{figures/cases/p0_img1.png}{p0\_img1}
+    {人工 Bad、模型判 Good；道路可見，但霧氣、落石與路側損壞降低實用性。}
+  \hfill
+  \casecard{figures/cases/p2_img12.png}{p2\_img12}
+    {人工 Bad、模型判 Good；影像清晰但道路遭大範圍落石遮擋。}
+  \caption{VGG16 錯誤預測案例}
+  \label{fig:binary-incorrect-cases}
+\end{figure}
+
+五個錯誤案例皆為人工 Bad、模型預測 Good，支持前述模型偏向
+Good 的觀察。模型較容易學到亮度、清晰度或局部道路紋理，
+但未充分理解道路完整性、遮擋程度及場景真實性。
+
+\section{進階任務：品質分數與人工 Top-100 比較}
+\label{sec:ranking-results}
+
+\subsection{品質分數定義}
+\label{subsec:ranking-score-definitions}
+
+令模型對影像 \(x_i\) 的原始品質分數為 \(s_i\)。原始分數使用
+與 validation 相同的確定性前處理。信心修正分數使用五次固定
+random seed 的 test-time augmentation（TTA），定義為：
+\begin{equation}
+  s_i^{\mathrm{adj}}
+  = \mu_i^{\mathrm{TTA}} - 0.5\,\sigma_i^{\mathrm{TTA}},
+  \label{eq:adjusted-score}
+\end{equation}
+其中 \(\mu_i^{\mathrm{TTA}}\) 與 \(\sigma_i^{\mathrm{TTA}}\) 分別為
+五次 TTA 預測的平均與標準差。係數 0.5 在查看人工比較結果前固定。
+
+為避免不同模型的輸出尺度支配集成結果，先將各模型分數轉為
+z-score，再取三模型平均：
+\begin{equation}
+  s_i^{\mathrm{ens}}
+  = \frac{1}{3}\sum_{m \in
+    \{\mathrm{VGG16,R18,R50}\}}
+    \frac{s_{i,m}-\mu_m}{\sigma_m}.
+  \label{eq:ensemble-score}
+\end{equation}
+
+\subsection{進階訓練表現}
+\label{subsec:ranking-training}
+
+\reportfigure{figures/wandb/ranking_loss_curves.png}
+  {三個品質迴歸模型的 training/validation loss 曲線}
+  {fig:ranking-loss}
+
+\reportfigure{figures/wandb/ranking_validation_metrics.png}
+  {三個品質迴歸模型的 validation MAE、RMSE 與 Spearman correlation}
+  {fig:ranking-validation}
+
+\begin{table}[H]
+  \centering
+  \caption{進階正式訓練的最佳 validation 結果}
+  \label{tab:ranking-validation}
+  \resizebox{\linewidth}{!}{%
+  \begin{tabular}{lrrrrl}
+    \toprule
+    模型 & Best epoch & MAE & RMSE & Spearman & W\&B run ID \\
+    \midrule
+    VGG16 & \todo{W\&B} & \todo{W\&B} & \todo{W\&B} & \todo{W\&B}
+      & \texttt{rwu768x7} \\
+    ResNet18 & \todo{W\&B} & \todo{W\&B} & \todo{W\&B} & \todo{W\&B}
+      & \texttt{g409y4vj} \\
+    ResNet50 & \todo{W\&B} & \todo{W\&B} & \todo{W\&B} & \todo{W\&B}
+      & \texttt{ijwx6i2k} \\
+    \bottomrule
+  \end{tabular}
+  }
+\end{table}
+
+\reportfigure{figures/wandb/ranking_runs_table.png}
+  {進階任務三個正式 W\&B runs 的設定與最佳驗證結果}
+  {fig:ranking-runs-table}
+
+\subsection{Top-100 與人工參考集比較}
+\label{subsec:ranking-metrics}
+
+模型 Top-100 與人工 Top-100 的交集數量記為 \(|A\cap B|\)。
+由於兩組皆為 100 張：
+\begin{align}
+  \mathrm{Overlap} &= \frac{|A\cap B|}{100},
+  \label{eq:overlap}\\
+  \mathrm{Jaccard} &= \frac{|A\cap B|}{|A\cup B|}.
+  \label{eq:jaccard}
+\end{align}
+
+\begin{table}[H]
+  \centering
+  \caption{各模型與排序方式相對人工 Top-100 的結果}
+  \label{tab:ranking-metrics}
+  \begin{tabular}{lrrrr}
+    \toprule
+    Ranking method & Intersection & Overlap & Jaccard & AP \\
+    \midrule
+    VGG16 raw & 26 & 0.26 & 0.1494 & 0.2890 \\
+    VGG16 adjusted & 30 & 0.30 & 0.1765 & 0.2967 \\
+    ResNet18 raw & \textbf{34} & \textbf{0.34} & \textbf{0.2048} & 0.3015 \\
+    ResNet18 adjusted & \textbf{34} & \textbf{0.34} & \textbf{0.2048}
+      & \textbf{0.3102} \\
+    ResNet50 raw & 27 & 0.27 & 0.1561 & 0.2666 \\
+    ResNet50 adjusted & 27 & 0.27 & 0.1561 & 0.2740 \\
+    Ensemble raw & 33 & 0.33 & 0.1976 & 0.2861 \\
+    Ensemble adjusted & 33 & 0.33 & 0.1976 & 0.2937 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\reportfigure{figures/wandb/ranking_final_metrics.png}
+  {W\&B 最終 ranking evaluation 的 Intersection、Overlap、Jaccard 與 AP}
+  {fig:ranking-final-metrics}
+
+三個 raw 模型中，ResNet18 與人工 Top-100 的交集最多，為 34 張。
+信心修正後，VGG16 的 Intersection 由 26 提升至 30，Overlap 與
+Jaccard 也同步改善；ResNet18、ResNet50 與 ensemble 的 Top-100
+集合數量指標沒有改變，但四種 adjusted 方法的 AP 皆高於各自 raw
+版本。這表示不確定性懲罰主要改善完整 500 張候選池的排序次序，
+不一定改變 Top-100 邊界內的成員。
+
+最佳 AP 為 ResNet18 adjusted 的 0.3102。三模型 ensemble 沒有超越
+最佳單一模型，可能是較弱模型的排序誤差在平均後稀釋了 ResNet18
+的有效訊號。完整 Top-100 表已附於
+\texttt{tables/top100/}，主文以表~\ref{tab:ranking-metrics}
+呈現摘要結果。
+
+\subsection{AP 與 mAP 的命名}
+\label{subsec:ap-definition}
+
+AP 使用完整 500 張候選影像的連續品質分數計算，將人工 Top-100
+視為相關樣本，其餘 400 張視為非相關樣本。若只把模型 Top-100
+轉成 0/1，會丟失 Top-100 內部及邊界外的排序資訊，因此不能用來
+正確計算 AP。本實驗只有一組人工參考集合，只有一個 AP 值，
+故報告使用 AP，而非對多個 query 或多個 AP 取平均的 mAP。
+
+\subsection{三類質化案例}
+\label{subsec:ranking-cases}
+
+\subsubsection{人工與模型共同選中}
+\label{subsubsec:both-cases}
+
+\begin{figure}[H]
+  \centering
+  \casecard{figures/cases/p2_seed25.jpg}{p2\_seed25}
+    {道路與山區背景清楚，模型和人工皆判定具高品質。}
+  \hfill
+  \casecard{figures/cases/p4_img0.png}{p4\_img0}
+    {大型障礙物、道路位置與尺度關係清楚。}
+  \hfill
+  \casecard{figures/cases/p0_img9.png}{p0\_img9}
+    {落石位於道路上的位置明確，影像資訊完整。}
+
+  \medskip
+  \casecard{figures/cases/p3_img22.png}{p3\_img22}
+    {即使有霧與濕滑條件，道路和大型落石仍可辨識。}
+  \hfill
+  \casecard{figures/cases/p8_img27.png}{p8\_img27}
+    {道路、散落岩石與環境光線自然，任務資訊充分。}
+  \caption{人工與 ResNet18 adjusted 共同選中的案例}
+  \label{fig:ranking-both}
+\end{figure}
+
+共同選中的影像通常同時具備清楚道路邊界、可辨識障礙物、合理光影
+與足夠場景脈絡，表示模型確實學到部分符合人工規則的品質特徵。
+
+\subsubsection{人工選中但模型漏掉}
+\label{subsubsec:human-only-cases}
+
+\begin{figure}[H]
+  \centering
+  \casecard{figures/cases/p0_img12.png}{p0\_img12}
+    {人工重視道路與路側落石資訊，但模型排名僅第 317。}
+  \hfill
+  \casecard{figures/cases/p0_seed1.jpg}{p0\_seed1}
+    {道路可見但場景構圖特殊，可能偏離模型常見分布。}
+  \hfill
+  \casecard{figures/cases/p1_img10.png}{p1\_img10}
+    {夜間強光屬少見場景，模型可能因亮度分布不同而低估。}
+
+  \medskip
+  \casecard{figures/cases/p2_img25.png}{p2\_img25}
+    {近距離落石與濕滑道路清楚，但構圖與一般全景不同。}
+  \hfill
+  \casecard{figures/cases/p2_seed10.jpg}{p2\_seed10}
+    {道路完整且自然，模型可能因障礙物訊號較弱而低估。}
+  \caption{人工選中但 ResNet18 adjusted 漏掉的案例}
+  \label{fig:ranking-human-only}
+\end{figure}
+
+這些案例顯示模型可能忽略少見光線、特殊構圖、近距離視角，以及
+「道路本身完整自然」這類不依賴明顯落石紋理的高品質特徵。
+
+\subsubsection{模型選中但人工未選}
+\label{subsubsec:model-only-cases}
+
+\begin{figure}[H]
+  \centering
+  \casecard{figures/cases/p0_img29.png}{p0\_img29}
+    {畫面清楚且對比高，但道路遭落石遮擋，人工未列入最佳集合。}
+  \hfill
+  \casecard{figures/cases/p3_img8.png}{p3\_img8}
+    {岩石清晰、局部對比強，但道路幾乎不可辨識且有霧氣。}
+  \hfill
+  \casecard{figures/cases/p9_img11.png}{p9\_img11}
+    {岩石紋理明顯，但缺少完整道路資訊，人工評為 Bad。}
+
+  \medskip
+  \casecard{figures/cases/p5_seed29.jpg}{p5\_seed29}
+    {高亮度與強對比突出，但山體光線和場景真實性不足。}
+  \hfill
+  \casecard{figures/cases/p9_img15.png}{p9\_img15}
+    {夕陽水景具有視覺吸引力，卻幾乎沒有道路任務資訊。}
+  \caption{ResNet18 adjusted 選中但人工未選的案例}
+  \label{fig:ranking-model-only}
+\end{figure}
+
+模型限定案例顯示 ResNet18 可能偏好清晰岩石紋理、高亮度、
+高對比或具視覺吸引力的背景，而沒有充分確認道路是否存在、
+場景是否自然以及影像是否真正適用於道路障礙物判讀。
+
+\section{結論與討論}
+\label{sec:conclusion}
+
+基礎任務中，ResNet50 的 validation F1 最高，但 VGG16 在最終
+人工參考集上表現最佳，顯示小型資料集的 validation 排名未必能
+完全代表新場景。三模型皆偏向將影像判為 Good，後續可透過增加
+困難 Bad 案例、使用 class-aware sampling 或更強的道路區域特徵
+來改善 false positive。
+
+進階任務中，ResNet18 adjusted 取得最高 AP 0.3102，且其 Top-100
+和人工集合交集為 34 張。信心修正對完整排序有一致的 AP 改善，
+但 ensemble 未優於最佳單一模型，表示簡單平均無法保證互補。
+質化案例進一步顯示，模型已學到清晰度與障礙物紋理，但對道路
+完整性、真實性與少見場景的理解仍有限。
+
+本實驗的主要限制包括影像總量僅 500 張、人工分數具有主觀性、
+進階訓練分數範圍因隔離 Top-100 而縮小至 4--9，以及人工參考集合
+只有一組。未來可增加多位標註者、計算標註一致性、擴充少見場景，
+並嘗試 ordinal regression、pairwise ranking loss 或經 validation
+預先固定的加權 ensemble。
+
+\section{AI 工具使用說明}
+\label{sec:ai-tools}
+
+本作業使用生成式 AI／Codex 協助：
+\begin{itemize}
+  \item 整理作業需求、資料依賴與執行順序。
+  \item 檢查資料切分是否重疊，產生可重現的資料處理與評估程式。
+  \item 協助檢查推論程式中的 BatchNorm／TTA 問題及重現性設定。
+  \item 整理 W\&B config、結果表、案例候選與 LaTeX 報告格式。
+\end{itemize}
+
+影像品質分數、Good/Bad 門檻、人工 Top-100 成員及最終案例取捨
+均由使用者確認。AI 不參與模型最終測試標籤的自動決策，也沒有
+使用人工參考結果反覆調整模型、checkpoint 或排名係數。
+
+\section{實驗連結與重現資訊}
+\label{sec:links}
+
+\begin{itemize}
+  \item GitHub：
+  \href{https://github.com/Klorious/Summer-Training-Week7}
+  {https://github.com/Klorious/Summer-Training-Week7}
+  \item GitHub 工作分支：
+  \href{https://github.com/Klorious/Summer-Training-Week7/tree/codex/2}
+  {codex/2}
+  \item 基礎任務 W\&B project：
+  \href{https://wandb.ai/klorius-/training-Unit7-Binary}
+  {training-Unit7-Binary}
+  \item 基礎最終評估 run：
+  \href{https://wandb.ai/klorius-/training-Unit7-Binary/runs/bkfn0726}
+  {bkfn0726}
+  \item 進階任務 W\&B project：
+  \href{https://wandb.ai/klorius-/training-Unit7-Ranking}
+  {training-Unit7-Ranking}
+  \item 進階最終評估 run：
+  \href{https://wandb.ai/klorius-/training-Unit7-Ranking/runs/rkfn0726}
+  {rkfn0726}
+\end{itemize}
+
+\appendix
+\section{完整結果檔案索引}
+\label{app:result-files}
+
+\begin{longtable}{p{0.44\linewidth}p{0.46\linewidth}}
+  \toprule
+  檔案 & 說明 \\
+  \midrule
+  \endfirsthead
+  \toprule
+  檔案 & 說明 \\
+  \midrule
+  \endhead
+  \texttt{binary\_reference\_metrics.csv}
+    & 三模型最終 Accuracy、Precision、Recall、F1 與 confusion matrix 計數。\\
+  \texttt{reference\_results.csv}
+    & 三模型對 100 張參考集的完整 300 筆預測。\\
+  \texttt{all\_model\_scores.csv}
+    & 500 張候選影像的三模型 raw／adjusted 與 ensemble 分數。\\
+  \texttt{ranking\_metrics.csv}
+    & 8 種排序方式的 Intersection、Overlap、Jaccard 與 AP。\\
+  \texttt{tables/top100/*.csv}
+    & 各模型與各排序方法的完整 Top-100 表。\\
+  \bottomrule
+\end{longtable}
+
+\end{document}

@@ -5,6 +5,16 @@ wandb/
 data/raw/
 outputs/checkpoints/
 outputs/logs/
+outputs/case_selection_*/
+report/figures/cases/*
+!report/figures/cases/README.md
+report/*.aux
+report/*.log
+report/*.out
+report/*.toc
+report/*.synctex.gz
+report/main.pdf
+outputs/overleaf/
 *.pt
 *.pth
 *.ckpt
