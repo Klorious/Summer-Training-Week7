@@ -4,6 +4,7 @@ __pycache__/
 wandb/
 data/raw/
 outputs/checkpoints/
+outputs/logs/
 *.pt
 *.pth
 *.ckpt
