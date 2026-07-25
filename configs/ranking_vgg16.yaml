@@ -1,0 +1,13 @@
+model_name: "vgg16"
+task: "quality_regression"
+pretrained: true
+learning_rate: 0.0001
+batch_size: 32
+epochs: 30
+optimizer: "AdamW"
+loss: "SmoothL1Loss"
+input_size: 224
+weight_decay: 0.0001
+random_seed: 20260725
+num_workers: 4
+checkpoint_metric: "val_spearman"
