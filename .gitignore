@@ -9,3 +9,4 @@ outputs/checkpoints/
 *.ckpt
 完成作業指南報告.md
 check_environment.py
+outputs/ranking_buggy_backup_*/
