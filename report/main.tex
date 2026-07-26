@@ -22,13 +22,18 @@
 \setmainfont{TeX Gyre Termes}
 \setsansfont{TeX Gyre Heros}
 \setmonofont{Latin Modern Mono}
-\setCJKmainfont[
-  BoldFont=FandolSong-Bold
-]{FandolSong-Regular}
-\setCJKsansfont[
-  BoldFont=FandolHei-Bold
-]{FandolHei-Regular}
-\setCJKmonofont{FandolFang-Regular}
+\setCJKmainfont{Noto Serif CJK TC}
+\setCJKsansfont{Noto Sans CJK TC}
+\setCJKmonofont{Noto Sans CJK TC}
+
+% Force Traditional Chinese document labels.  The default CTeX labels and
+% Fandol glyph variants can appear in Simplified Chinese or miss Traditional
+% Chinese characters in some Overleaf installations.
+\renewcommand{\figurename}{圖}
+\renewcommand{\tablename}{表}
+\renewcommand{\contentsname}{目錄}
+\renewcommand{\abstractname}{摘要}
+\renewcommand{\appendixname}{附錄}
 
 \hypersetup{
   colorlinks=true,
@@ -318,14 +323,14 @@ validation 與 reference 的場景分布差異，以及模型對 Good 類別的
   \casecard{figures/cases/p1_seed12.jpg}{p1\_seed12}
     {人工 Bad、VGG16 判為 Bad；道路資訊不足，模型正確辨識為低品質。}
   \hfill
-  \casecard{figures/cases/p6_img19.png}{p6\_img19}
+  \casecard{figures/cases/p6_img19.jpg}{p6\_img19}
     {人工 Bad、VGG16 判為 Bad；畫面以落石近景為主，缺少完整道路脈絡。}
   \hfill
-  \casecard{figures/cases/p0_img21.png}{p0\_img21}
+  \casecard{figures/cases/p0_img21.jpg}{p0\_img21}
     {人工 Good、VGG16 判為 Good；道路、落石與濕滑狀態皆清楚可辨。}
 
   \medskip
-  \casecard{figures/cases/p2_img19.png}{p2\_img19}
+  \casecard{figures/cases/p2_img19.jpg}{p2\_img19}
     {人工 Good、VGG16 判為 Good；雖為雨天，障礙物和道路關係仍清楚。}
   \hfill
   \casecard{figures/cases/p2_seed0.jpg}{p2\_seed0}
@@ -336,20 +341,20 @@ validation 與 reference 的場景分布差異，以及模型對 Good 類別的
 
 \begin{figure}[H]
   \centering
-  \casecard{figures/cases/p7_img12.png}{p7\_img12}
+  \casecard{figures/cases/p7_img12.jpg}{p7\_img12}
     {人工 Bad、模型判 Good；模型可能偏重道路可見與畫面清晰，低估障礙物影響。}
   \hfill
-  \casecard{figures/cases/p3_img12.png}{p3\_img12}
+  \casecard{figures/cases/p3_img12.jpg}{p3\_img12}
     {人工 Bad、模型判 Good；岩壁與落石清楚，但缺少完整道路任務資訊。}
   \hfill
-  \casecard{figures/cases/p9_img5.png}{p9\_img5}
+  \casecard{figures/cases/p9_img5.jpg}{p9\_img5}
     {人工 Bad、模型判 Good；模型可能受到暖色光線與高局部對比影響。}
 
   \medskip
-  \casecard{figures/cases/p0_img1.png}{p0\_img1}
+  \casecard{figures/cases/p0_img1.jpg}{p0\_img1}
     {人工 Bad、模型判 Good；道路可見，但霧氣、落石與路側損壞降低實用性。}
   \hfill
-  \casecard{figures/cases/p2_img12.png}{p2\_img12}
+  \casecard{figures/cases/p2_img12.jpg}{p2\_img12}
     {人工 Bad、模型判 Good；影像清晰但道路遭大範圍落石遮擋。}
   \caption{VGG16 錯誤預測案例}
   \label{fig:binary-incorrect-cases}
@@ -491,17 +496,17 @@ AP 使用完整 500 張候選影像的連續品質分數計算，將人工 Top-1
   \casecard{figures/cases/p2_seed25.jpg}{p2\_seed25}
     {道路與山區背景清楚，模型和人工皆判定具高品質。}
   \hfill
-  \casecard{figures/cases/p4_img0.png}{p4\_img0}
+  \casecard{figures/cases/p4_img0.jpg}{p4\_img0}
     {大型障礙物、道路位置與尺度關係清楚。}
   \hfill
-  \casecard{figures/cases/p0_img9.png}{p0\_img9}
+  \casecard{figures/cases/p0_img9.jpg}{p0\_img9}
     {落石位於道路上的位置明確，影像資訊完整。}
 
   \medskip
-  \casecard{figures/cases/p3_img22.png}{p3\_img22}
+  \casecard{figures/cases/p3_img22.jpg}{p3\_img22}
     {即使有霧與濕滑條件，道路和大型落石仍可辨識。}
   \hfill
-  \casecard{figures/cases/p8_img27.png}{p8\_img27}
+  \casecard{figures/cases/p8_img27.jpg}{p8\_img27}
     {道路、散落岩石與環境光線自然，任務資訊充分。}
   \caption{人工與 ResNet18 adjusted 共同選中的案例}
   \label{fig:ranking-both}
@@ -515,17 +520,17 @@ AP 使用完整 500 張候選影像的連續品質分數計算，將人工 Top-1
 
 \begin{figure}[H]
   \centering
-  \casecard{figures/cases/p0_img12.png}{p0\_img12}
+  \casecard{figures/cases/p0_img12.jpg}{p0\_img12}
     {人工重視道路與路側落石資訊，但模型排名僅第 317。}
   \hfill
   \casecard{figures/cases/p0_seed1.jpg}{p0\_seed1}
     {道路可見但場景構圖特殊，可能偏離模型常見分布。}
   \hfill
-  \casecard{figures/cases/p1_img10.png}{p1\_img10}
+  \casecard{figures/cases/p1_img10.jpg}{p1\_img10}
     {夜間強光屬少見場景，模型可能因亮度分布不同而低估。}
 
   \medskip
-  \casecard{figures/cases/p2_img25.png}{p2\_img25}
+  \casecard{figures/cases/p2_img25.jpg}{p2\_img25}
     {近距離落石與濕滑道路清楚，但構圖與一般全景不同。}
   \hfill
   \casecard{figures/cases/p2_seed10.jpg}{p2\_seed10}
@@ -542,20 +547,20 @@ AP 使用完整 500 張候選影像的連續品質分數計算，將人工 Top-1
 
 \begin{figure}[H]
   \centering
-  \casecard{figures/cases/p0_img29.png}{p0\_img29}
+  \casecard{figures/cases/p0_img29.jpg}{p0\_img29}
     {畫面清楚且對比高，但道路遭落石遮擋，人工未列入最佳集合。}
   \hfill
-  \casecard{figures/cases/p3_img8.png}{p3\_img8}
+  \casecard{figures/cases/p3_img8.jpg}{p3\_img8}
     {岩石清晰、局部對比強，但道路幾乎不可辨識且有霧氣。}
   \hfill
-  \casecard{figures/cases/p9_img11.png}{p9\_img11}
+  \casecard{figures/cases/p9_img11.jpg}{p9\_img11}
     {岩石紋理明顯，但缺少完整道路資訊，人工評為 Bad。}
 
   \medskip
   \casecard{figures/cases/p5_seed29.jpg}{p5\_seed29}
     {高亮度與強對比突出，但山體光線和場景真實性不足。}
   \hfill
-  \casecard{figures/cases/p9_img15.png}{p9\_img15}
+  \casecard{figures/cases/p9_img15.jpg}{p9\_img15}
     {夕陽水景具有視覺吸引力，卻幾乎沒有道路任務資訊。}
   \caption{ResNet18 adjusted 選中但人工未選的案例}
   \label{fig:ranking-model-only}

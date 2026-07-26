@@ -25,9 +25,12 @@
 專案也包含 `latexmkrc`，用來向 latexmk 指定 XeLaTeX；但仍建議在
 Overleaf 專案設定中明確選擇 XeLaTeX。
 
-## 3. 尚需放入的 W&B 圖檔
+報告使用 Overleaf 內建的 `Noto Serif CJK TC` 與
+`Noto Sans CJK TC`，以繁體中文字形顯示正文、圖表標題與章節名稱。
 
-將匯出的圖片放到 `figures/wandb/`，檔名固定為：
+## 3. W&B 圖檔
+
+下列九張報告用圖片已放在 `figures/wandb/`：
 
 - `binary_loss_curves.png`
 - `binary_accuracy_curves.png`
@@ -39,7 +42,14 @@ Overleaf 專案設定中明確選擇 XeLaTeX。
 - `ranking_runs_table.png`
 - `ranking_final_metrics.png`
 
-圖檔尚未放入時，報告仍可編譯，對應位置會顯示占位框。
+若自行替換圖片，請保留相同檔名。報告會在圖檔缺失時顯示占位框。
+
+### Overleaf 免費方案編譯逾時
+
+本專案中的報告圖片已縮至適合 A4 報告的解析度，案例圖片也已轉為
+JPEG，以降低 XeLaTeX 的記憶體與編譯時間。若從舊專案更新檔案後仍
+顯示逾時，請使用 `Recompile from scratch` 清除舊快取；最穩妥方式是
+以最新 ZIP 建立新的 Overleaf project，再選擇 XeLaTeX 編譯。
 
 ## 4. 必須人工補上的內容
 
