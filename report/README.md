@@ -54,10 +54,11 @@ JPEG，以降低 XeLaTeX 的記憶體與編譯時間。若從舊專案更新檔�
 ## 4. 必須人工補上的內容
 
 - 封面的姓名與學號。
-- `main.tex` 進階 validation 表中的 12 個 `\todo{W&B}`：
-  三個模型各自的 best epoch、MAE、RMSE 與 Spearman。
 - 確認所有 W&B 與 GitHub 連結可由未登入瀏覽器開啟。
 - 若實際觀察與案例草稿不同，修正案例說明。
+
+進階 validation 表的 best epoch、MAE、RMSE 與 Spearman 已由
+三個正式 W&B run 的完整歷史紀錄精確填入。
 
 ## 5. 圖片與資料
 
