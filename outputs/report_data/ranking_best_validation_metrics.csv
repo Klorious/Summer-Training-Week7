@@ -1,0 +1,4 @@
+model,run_id,run_name,best_epoch,val_mae,val_rmse,val_spearman,run_url
+VGG16,rwu768x7,vgg16_quality_lr0.0001_bs32,30,0.7168703937530517,0.9043323555057974,0.5829983706409355,https://wandb.ai/klorius-/training-Unit7-Ranking/runs/rwu768x7
+ResNet18,g409y4vj,resnet18_quality_lr0.0001_bs32,13,0.9856469821929932,1.4851216396751328,0.35694298763802584,https://wandb.ai/klorius-/training-Unit7-Ranking/runs/g409y4vj
+ResNet50,ijwx6i2k,resnet50_quality_lr0.0001_bs32,15,1.0081318712234497,1.2864212246264501,0.4795683978410805,https://wandb.ai/klorius-/training-Unit7-Ranking/runs/ijwx6i2k
