@@ -81,7 +81,7 @@
 }
 
 \title{\textbf{Training Unit 7}\\影像品質二分類與 Top-100 排名分析}
-\author{姓名：\underline{\hspace{4cm}}\qquad 學號：\underline{\hspace{4cm}}}
+\author{姓名：林慧心\qquad 學號：413410020}
 \date{\today}
 
 \begin{document}
@@ -200,17 +200,63 @@ PyTorch 2.6，GPU 為 NVIDIA Tesla V100-SXM2-32GB。
 
 每張影像先由人工給予 1--10 分品質分數，並使用下列固定門檻
 產生二元標籤：
-\[
+\begin{equation}
   y =
   \begin{cases}
     0\;(\text{Bad}), & 1 \leq s \leq 7,\\
     1\;(\text{Good}), & 8 \leq s \leq 10.
   \end{cases}
-\]
+  \label{eq:binary-label-rule}
+\end{equation}
 
 人工評分考量道路可見程度、障礙物可辨識程度、影像清晰度、
 遮擋程度與場景真實性。基礎參考集包含 50 張 Good 與 50 張
 Bad，並涵蓋容易判斷及邊界案例。
+
+\begin{table}[H]
+  \centering
+  \small
+  \caption{人工影像品質評分規準}
+  \label{tab:human-scoring-rubric}
+  \begin{tabularx}{\linewidth}{
+    >{\raggedright\arraybackslash}p{0.15\linewidth}
+    >{\raggedright\arraybackslash}X
+    >{\raggedright\arraybackslash}X
+    >{\raggedright\arraybackslash}X
+  }
+    \toprule
+    評分項目 & 0 分 & 1 分 & 2 分 \\
+    \midrule
+    道路可見程度
+      & 道路幾乎不可見
+      & 道路僅部分可見
+      & 道路清楚可見 \\
+    障礙物可辨識程度
+      & 障礙物無法判讀
+      & 障礙物僅部分可判讀
+      & 障礙物輪廓與位置清楚可辨識 \\
+    影像清晰度
+      & 嚴重模糊或失焦
+      & 輕微模糊，但主要內容仍可判斷
+      & 影像清楚 \\
+    遮擋程度
+      & 道路或障礙物等重要區域嚴重遮擋
+      & 重要區域部分遮擋
+      & 重要區域幾乎沒有遮擋 \\
+    場景真實性
+      & 明顯不合理，例如石塊浮空、路面融合或物理結構崩壞
+      & 略顯不自然，例如帶有生成影像的油畫感或局部破綻，
+        但不影響整體判斷
+      & 光影、幾何及物件關係自然，符合真實山區道路情境 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+五個項目各給予 0--2 分後加總，理論總分範圍為 0--10 分；
+本資料集實際記錄採 1--10 分，沒有使用總分 0。此規準在標註
+500 張影像前固定，所有影像皆採相同方式評估。二元任務再依
+式~\eqref{eq:binary-label-rule} 將 1--7 分標為 Bad、8--10 分標為
+Good；進階任務則保留原始連續總分作為品質監督訊號。
 
 \subsection{進階人工 Top-100 規則}
 \label{subsec:human-top100}
@@ -284,6 +330,38 @@ validation F1 由 0.7869 提升至 0.8112，因此後續參考集推論採用
 LR=0.001 的 checkpoint。三種架構中，ResNet50 的最佳 validation
 F1 最高。所有選擇皆只依 validation 結果完成，沒有使用最終參考集。
 
+\subsection{完整候選池分類分布}
+\label{subsec:binary-candidate-pool}
+
+三個已固定 checkpoint 另以與 validation 相同的確定性前處理，
+分別對完整 500 張候選影像執行分類，共產生 1500 筆唯一的
+模型／影像預測。所有預測均無缺失值、重複值、NaN 或 Inf，
+且每筆 Good／Bad 機率和在浮點誤差範圍內等於 1。
+
+\begin{table}[H]
+  \centering
+  \caption{三模型對完整 500 張候選池的預測標籤分布}
+  \label{tab:binary-candidate-pool-distribution}
+  \begin{tabular}{lrrrrr}
+    \toprule
+    模型 & Predicted Bad & Predicted Good & Total & Bad ratio & Good ratio \\
+    \midrule
+    VGG16 & 147 & 353 & 500 & 0.294 & 0.706 \\
+    ResNet18 & 82 & 418 & 500 & 0.164 & 0.836 \\
+    ResNet50 & 117 & 383 & 500 & 0.234 & 0.766 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+表~\ref{tab:binary-candidate-pool-distribution} 顯示三個模型皆將
+多數候選影像預測為 Good，其中 ResNet18 的 Good 比例最高
+（83.6\%），ResNet50 次之（76.6\%），VGG16 最低（70.6\%）。
+此相對順序與三模型在人工參考集上的 false-positive 傾向一致，
+支持模型整體偏向 Good 的觀察。由於完整候選池包含訓練集與
+驗證集影像，本表只用來描述固定模型的整體分類分布與模型差異，
+不將其解讀為獨立測試集的泛化 Accuracy；正式最終比較仍以
+第~\ref{subsec:binary-reference} 節的嚴格隔離人工參考集為準。
+
 \subsection{最終人工參考集結果}
 \label{subsec:binary-reference}
 
@@ -327,11 +405,11 @@ validation 與 reference 的場景分布差異，以及模型對 Good 類別的
     {人工 Bad、VGG16 判為 Bad；畫面以落石近景為主，缺少完整道路脈絡。}
   \hfill
   \casecard{figures/cases/p0_img21.jpg}{p0\_img21}
-    {人工 Good、VGG16 判為 Good；道路、落石與濕滑狀態皆清楚可辨。}
+    {人工 Good、VGG16 判為 Good；道路、落石能夠辨識、畫面清晰。}
 
   \medskip
   \casecard{figures/cases/p2_img19.jpg}{p2\_img19}
-    {人工 Good、VGG16 判為 Good；雖為雨天，障礙物和道路關係仍清楚。}
+    {人工 Good、VGG16 判為 Good；障礙物清晰、道路略為可辨。}
   \hfill
   \casecard{figures/cases/p2_seed0.jpg}{p2\_seed0}
     {人工 Good、VGG16 判為 Good；曝光自然、道路輪廓完整且清晰。}
@@ -345,17 +423,18 @@ validation 與 reference 的場景分布差異，以及模型對 Good 類別的
     {人工 Bad、模型判 Good；模型可能偏重道路可見與畫面清晰，低估障礙物影響。}
   \hfill
   \casecard{figures/cases/p3_img12.jpg}{p3\_img12}
-    {人工 Bad、模型判 Good；岩壁與落石清楚，但缺少完整道路任務資訊。}
+    {人工 Bad、模型判 Good；缺少完整道路任務資訊、障礙物微不易辨識。}
   \hfill
   \casecard{figures/cases/p9_img5.jpg}{p9\_img5}
-    {人工 Bad、模型判 Good；模型可能受到暖色光線與高局部對比影響。}
+    {人工 Bad、模型判 Good；模型可能偏重障礙物可見與畫面清晰，
+    低估道路不可見影響。}
 
   \medskip
   \casecard{figures/cases/p0_img1.jpg}{p0\_img1}
-    {人工 Bad、模型判 Good；道路可見，但霧氣、落石與路側損壞降低實用性。}
+    {人工 Bad、模型判 Good；道路可見，但細碎落石與路側損壞降低實用性。}
   \hfill
   \casecard{figures/cases/p2_img12.jpg}{p2\_img12}
-    {人工 Bad、模型判 Good；影像清晰但道路遭大範圍落石遮擋。}
+    {人工 Bad、模型判 Good；影像清晰但道路遭遮擋且後段障礙物微不易辨識。}
   \caption{VGG16 錯誤預測案例}
   \label{fig:binary-incorrect-cases}
 \end{figure}
@@ -411,11 +490,11 @@ z-score，再取三模型平均：
     \toprule
     模型 & Best epoch & MAE & RMSE & Spearman & W\&B run ID \\
     \midrule
-    VGG16 & \todo{W\&B} & \todo{W\&B} & \todo{W\&B} & \todo{W\&B}
+    VGG16 & 30 & 0.7169 & 0.9043 & 0.5830
       & \texttt{rwu768x7} \\
-    ResNet18 & \todo{W\&B} & \todo{W\&B} & \todo{W\&B} & \todo{W\&B}
+    ResNet18 & 13 & 0.9856 & 1.4851 & 0.3569
       & \texttt{g409y4vj} \\
-    ResNet50 & \todo{W\&B} & \todo{W\&B} & \todo{W\&B} & \todo{W\&B}
+    ResNet50 & 15 & 1.0081 & 1.2864 & 0.4796
       & \texttt{ijwx6i2k} \\
     \bottomrule
   \end{tabular}
@@ -426,8 +505,24 @@ z-score，再取三模型平均：
   {進階任務三個正式 W\&B runs 的設定與最佳驗證結果}
   {fig:ranking-runs-table}
 
+VGG16 在 checkpoint-selected epoch 上同時取得最低 validation MAE
+（0.7169）、最低 RMSE（0.9043）與最高 Spearman correlation
+（0.5830），表示它最能貼近非人工 Top-100 驗證集的 1--10 分
+品質目標。然而，最終人工 Top-100 比較中最高 AP 來自
+ResNet18 adjusted，而非 VGG16。這個差異並不矛盾：validation
+指標衡量 400 張非參考影像切分中的分數誤差與相關性；最終 AP
+則衡量鎖定人工 Top-100 在完整 500 張候選池排序中的位置。兩者
+的評估目標與資料角色不同，因此 validation regression 表現最佳
+不保證最終 Top-100 AP 最高。
+
 \subsection{Top-100 與人工參考集比較}
 \label{subsec:ranking-metrics}
+
+Overlap 與 Jaccard 衡量兩個 Top-100 集合的一致程度，AP 則衡量
+模型在完整候選池上的整體排序品質；三者都是集合或排序層級的
+評估指標，不能視為任何單張圖片的品質分數。單張圖片可具有模型
+輸出的 raw 或 adjusted 品質分數，以及是否屬於人工 Top-100 的
+相關性標記，但不具有個別的 Overlap、Jaccard 或 AP。
 
 模型 Top-100 與人工 Top-100 的交集數量記為 \(|A\cap B|\)。
 由於兩組皆為 100 張：
@@ -494,13 +589,13 @@ AP 使用完整 500 張候選影像的連續品質分數計算，將人工 Top-1
 \begin{figure}[H]
   \centering
   \casecard{figures/cases/p2_seed25.jpg}{p2\_seed25}
-    {道路與山區背景清楚，模型和人工皆判定具高品質。}
+    {道路清晰、環境自然，模型和人工皆判定具高品質。}
   \hfill
   \casecard{figures/cases/p4_img0.jpg}{p4\_img0}
     {大型障礙物、道路位置與尺度關係清楚。}
   \hfill
   \casecard{figures/cases/p0_img9.jpg}{p0\_img9}
-    {落石位於道路上的位置明確，影像資訊完整。}
+    {道路清晰可辨，影像資訊完整。}
 
   \medskip
   \casecard{figures/cases/p3_img22.jpg}{p3\_img22}
@@ -548,20 +643,21 @@ AP 使用完整 500 張候選影像的連續品質分數計算，將人工 Top-1
 \begin{figure}[H]
   \centering
   \casecard{figures/cases/p0_img29.jpg}{p0\_img29}
-    {畫面清楚且對比高，但道路遭落石遮擋，人工未列入最佳集合。}
+    {畫面清楚，但道路遭遮擋、後半路段略為扭曲不自然，
+    人工未列入最佳集合。}
   \hfill
   \casecard{figures/cases/p3_img8.jpg}{p3\_img8}
-    {岩石清晰、局部對比強，但道路幾乎不可辨識且有霧氣。}
+    {岩石清晰、局部對比強，但道路幾乎不可辨識且畫面略微模糊。}
   \hfill
   \casecard{figures/cases/p9_img11.jpg}{p9\_img11}
-    {岩石紋理明顯，但缺少完整道路資訊，人工評為 Bad。}
+    {岩石紋理明顯，但缺少完整道路資訊、場景不真實，人工評為 Bad。}
 
   \medskip
   \casecard{figures/cases/p5_seed29.jpg}{p5\_seed29}
     {高亮度與強對比突出，但山體光線和場景真實性不足。}
   \hfill
   \casecard{figures/cases/p9_img15.jpg}{p9\_img15}
-    {夕陽水景具有視覺吸引力，卻幾乎沒有道路任務資訊。}
+    {障礙物可辨，卻幾乎沒有道路任務資訊。}
   \caption{ResNet18 adjusted 選中但人工未選的案例}
   \label{fig:ranking-model-only}
 \end{figure}
@@ -634,7 +730,10 @@ AP 使用完整 500 張候選影像的連續品質分數計算，將人工 Top-1
 \section{完整結果檔案索引}
 \label{app:result-files}
 
-\begin{longtable}{p{0.44\linewidth}p{0.46\linewidth}}
+\begin{longtable}{
+  >{\raggedright\arraybackslash}p{0.44\linewidth}
+  >{\raggedright\arraybackslash}p{0.46\linewidth}
+}
   \toprule
   檔案 & 說明 \\
   \midrule
@@ -643,15 +742,19 @@ AP 使用完整 500 張候選影像的連續品質分數計算，將人工 Top-1
   檔案 & 說明 \\
   \midrule
   \endhead
-  \texttt{binary\_reference\_metrics.csv}
+  \path{binary_reference_metrics.csv}
     & 三模型最終 Accuracy、Precision、Recall、F1 與 confusion matrix 計數。\\
-  \texttt{reference\_results.csv}
+  \path{reference_results.csv}
     & 三模型對 100 張參考集的完整 300 筆預測。\\
-  \texttt{all\_model\_scores.csv}
+  \path{binary_candidate_pool_predictions.csv}
+    & 三模型對完整 500 張候選池的 1500 筆預測。\\
+  \path{binary_candidate_pool_distribution.csv}
+    & 三模型在完整候選池上的 Good／Bad 數量與比例。\\
+  \path{all_model_scores.csv}
     & 500 張候選影像的三模型 raw／adjusted 與 ensemble 分數。\\
-  \texttt{ranking\_metrics.csv}
+  \path{ranking_metrics.csv}
     & 8 種排序方式的 Intersection、Overlap、Jaccard 與 AP。\\
-  \texttt{tables/top100/*.csv}
+  \path{tables/top100/*.csv}
     & 各模型與各排序方法的完整 Top-100 表。\\
   \bottomrule
 \end{longtable}
