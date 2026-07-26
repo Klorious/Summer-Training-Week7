@@ -1,0 +1,105 @@
+﻿{
+    "task":  "Advanced quality ranking regression",
+    "target_source":  "Existing manual 1-10 human_score from binary_all_scores.csv",
+    "split_method":  "Stratified by quality_score; 300 train / 100 validation",
+    "reference_exclusion":  "All ranking_reference_top100.csv images are excluded from ranking targets, train, and validation.",
+    "summary":  {
+                    "targets":  400,
+                    "train":  300,
+                    "validation":  100,
+                    "target_score_distribution":  [
+                                                      {
+                                                          "quality_score":  4,
+                                                          "count":  1
+                                                      },
+                                                      {
+                                                          "quality_score":  5,
+                                                          "count":  20
+                                                      },
+                                                      {
+                                                          "quality_score":  6,
+                                                          "count":  64
+                                                      },
+                                                      {
+                                                          "quality_score":  7,
+                                                          "count":  118
+                                                      },
+                                                      {
+                                                          "quality_score":  8,
+                                                          "count":  133
+                                                      },
+                                                      {
+                                                          "quality_score":  9,
+                                                          "count":  64
+                                                      }
+                                                  ],
+                    "train_score_distribution":  [
+                                                     {
+                                                         "quality_score":  4,
+                                                         "count":  1
+                                                     },
+                                                     {
+                                                         "quality_score":  5,
+                                                         "count":  15
+                                                     },
+                                                     {
+                                                         "quality_score":  6,
+                                                         "count":  48
+                                                     },
+                                                     {
+                                                         "quality_score":  7,
+                                                         "count":  88
+                                                     },
+                                                     {
+                                                         "quality_score":  8,
+                                                         "count":  100
+                                                     },
+                                                     {
+                                                         "quality_score":  9,
+                                                         "count":  48
+                                                     }
+                                                 ],
+                    "validation_score_distribution":  [
+                                                          {
+                                                              "quality_score":  5,
+                                                              "count":  5
+                                                          },
+                                                          {
+                                                              "quality_score":  6,
+                                                              "count":  16
+                                                          },
+                                                          {
+                                                              "quality_score":  7,
+                                                              "count":  30
+                                                          },
+                                                          {
+                                                              "quality_score":  8,
+                                                              "count":  33
+                                                          },
+                                                          {
+                                                              "quality_score":  9,
+                                                              "count":  16
+                                                          }
+                                                      ],
+                    "train_binary_distribution":  [
+                                                      {
+                                                          "label":  "Bad",
+                                                          "count":  152
+                                                      },
+                                                      {
+                                                          "label":  "Good",
+                                                          "count":  148
+                                                      }
+                                                  ],
+                    "validation_binary_distribution":  [
+                                                           {
+                                                               "label":  "Bad",
+                                                               "count":  51
+                                                           },
+                                                           {
+                                                               "label":  "Good",
+                                                               "count":  49
+                                                           }
+                                                       ]
+                }
+}

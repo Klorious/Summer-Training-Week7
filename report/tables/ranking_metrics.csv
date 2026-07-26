@@ -1,0 +1,9 @@
+ranking_method,intersection,overlap,jaccard,ap
+vgg16_raw_score,26,0.26,0.1494,0.289
+vgg16_adjusted_score,30,0.3,0.1765,0.2967
+resnet18_raw_score,34,0.34,0.2048,0.3015
+resnet18_adjusted_score,34,0.34,0.2048,0.3102
+resnet50_raw_score,27,0.27,0.1561,0.2666
+resnet50_adjusted_score,27,0.27,0.1561,0.274
+ensemble_raw_score,33,0.33,0.1976,0.2861
+ensemble_adjusted_score,33,0.33,0.1976,0.2937

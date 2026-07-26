@@ -1,0 +1,128 @@
+﻿{
+    "method":  "All score-10 images plus score-9 images selected with proportional-series balancing",
+    "tie_break":  "image_id ascending within the same score and series",
+    "total_selected":  100,
+    "score_10_selected":  52,
+    "score_9_selected":  48,
+    "series_summary":  [
+                           {
+                               "series":  "p0_img",
+                               "selected":  12,
+                               "score_10":  12,
+                               "score_9":  0,
+                               "target_quota":  6
+                           },
+                           {
+                               "series":  "p0_seed",
+                               "selected":  7,
+                               "score_10":  3,
+                               "score_9":  4,
+                               "target_quota":  6
+                           },
+                           {
+                               "series":  "p1_img",
+                               "selected":  7,
+                               "score_10":  4,
+                               "score_9":  3,
+                               "target_quota":  6
+                           },
+                           {
+                               "series":  "p1_seed",
+                               "selected":  4,
+                               "score_10":  0,
+                               "score_9":  4,
+                               "target_quota":  6
+                           },
+                           {
+                               "series":  "p2_img",
+                               "selected":  7,
+                               "score_10":  2,
+                               "score_9":  5,
+                               "target_quota":  6
+                           },
+                           {
+                               "series":  "p2_seed",
+                               "selected":  16,
+                               "score_10":  16,
+                               "score_9":  0,
+                               "target_quota":  6
+                           },
+                           {
+                               "series":  "p3_img",
+                               "selected":  7,
+                               "score_10":  1,
+                               "score_9":  6,
+                               "target_quota":  6
+                           },
+                           {
+                               "series":  "p3_seed",
+                               "selected":  3,
+                               "score_10":  0,
+                               "score_9":  3,
+                               "target_quota":  6
+                           },
+                           {
+                               "series":  "p4_img",
+                               "selected":  7,
+                               "score_10":  4,
+                               "score_9":  3,
+                               "target_quota":  6
+                           },
+                           {
+                               "series":  "p4_seed",
+                               "selected":  7,
+                               "score_10":  5,
+                               "score_9":  2,
+                               "target_quota":  6
+                           },
+                           {
+                               "series":  "p5_img",
+                               "selected":  2,
+                               "score_10":  0,
+                               "score_9":  2,
+                               "target_quota":  6
+                           },
+                           {
+                               "series":  "p5_seed",
+                               "selected":  4,
+                               "score_10":  0,
+                               "score_9":  4,
+                               "target_quota":  6
+                           },
+                           {
+                               "series":  "p6_img",
+                               "selected":  1,
+                               "score_10":  0,
+                               "score_9":  1,
+                               "target_quota":  6
+                           },
+                           {
+                               "series":  "p6_seed",
+                               "selected":  2,
+                               "score_10":  1,
+                               "score_9":  1,
+                               "target_quota":  4
+                           },
+                           {
+                               "series":  "p7_img",
+                               "selected":  7,
+                               "score_10":  2,
+                               "score_9":  5,
+                               "target_quota":  6
+                           },
+                           {
+                               "series":  "p8_img",
+                               "selected":  6,
+                               "score_10":  2,
+                               "score_9":  4,
+                               "target_quota":  6
+                           },
+                           {
+                               "series":  "p9_img",
+                               "selected":  1,
+                               "score_10":  0,
+                               "score_9":  1,
+                               "target_quota":  6
+                           }
+                       ]
+}

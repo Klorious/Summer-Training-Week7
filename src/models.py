@@ -28,3 +28,30 @@ def get_binary_model(model_name="resnet18", pretrained=True):
         raise ValueError(f"不支援的模型名稱: {model_name}")
         
     return model
+
+
+def get_quality_model(model_name="resnet18", pretrained=True):
+    """Build a pretrained backbone with one unconstrained quality-score output."""
+
+    if model_name == "vgg16":
+        weights = VGG16_Weights.DEFAULT if pretrained else None
+        model = vgg16(weights=weights)
+        in_features = model.classifier[6].in_features
+        model.classifier[6] = nn.Linear(in_features, 1)
+
+    elif model_name == "resnet18":
+        weights = ResNet18_Weights.DEFAULT if pretrained else None
+        model = resnet18(weights=weights)
+        in_features = model.fc.in_features
+        model.fc = nn.Linear(in_features, 1)
+
+    elif model_name == "resnet50":
+        weights = ResNet50_Weights.DEFAULT if pretrained else None
+        model = resnet50(weights=weights)
+        in_features = model.fc.in_features
+        model.fc = nn.Linear(in_features, 1)
+
+    else:
+        raise ValueError(f"Unsupported quality model: {model_name}")
+
+    return model
